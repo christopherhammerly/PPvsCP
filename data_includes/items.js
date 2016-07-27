@@ -541,6 +541,6 @@ var items = [
 [["cond-H",48], ds, {s: ["The tenant", "next to the landlords", "apparently have tried", "to be respectful", "of the rules outlined in the lease."]}, "Question", {q: "How acceptable did you find the sentence?", as: ["1","2","3","4","5","6","7"],presentAsScale: true, autoFirstChar: true, leftComment: "(bad)", rightComment: "(good)"}],
 
 
-[["filler",49], ds, {s: ["John envied", "the friend", "of the colonel,", "who was on the balcony."]}, "Question", {q: "How acceptable did you find the sentence?", as: ["1","2","3","4","5","6","7"],presentAsScale: true, autoFirstChar: true, leftComment: "(bad)", rightComment: "(good)"}],
+[["filler",49], ds, {s: ["John envied", "the friend", "of the colonel,", "who was on the balcony."]}, "Question", {q: "How acceptable did you find the sentence?", as: ["1","2","3","4","5","6","7"],presentAsScale: true, autoFirstChar: true, leftComment: "(bad)", rightComment: "(good)"}]
 
 ];
