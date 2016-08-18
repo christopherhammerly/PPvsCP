@@ -1,12 +1,10 @@
-var shuffleSequence = seq("consent", "intro", "Practice", "presep", "dummysep",
+var shuffleSequence = seq("consent", "setcounter", "intro", "Practice", "presep", "dummysep",
                         sepWith("sep", rshuffle(startsWith("cond"), startsWith("filler"))), "exit");
 //var practiceItemTypes = ["Practice"];
 //var progressBarText = ["Progress"];
 var ds = DashedSentence;
 
 var showProgressBar = false;
-
-counterOverride = 0;
 
 var defaults = [
     Separator,{
@@ -37,8 +35,8 @@ function modifyRunningOrder(ro) {
 
 var items = [
 
-["setcounter", "__SetCounter__", { }],
-["consent", "Form", {consentRequired: true, html: {include: "consent-2015.html" }} ],    
+["consent", "Form", {consentRequired: true, html: {include: "consent-2016.html" }} ], 
+["setcounter", "__SetCounter__", { }],   
 ["intro", "Form", {consentRequired: true, html: {include: "intro.html" }} ],
 ["intro", "Form", {consentRequired: true, html: {include: "intro1.html" }} ],
 ["intro", "Form", {consentRequired: true, html: {include: "intro2.html" }} ],
