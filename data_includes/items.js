@@ -1,4 +1,4 @@
-var shuffleSequence = seq("consent", "setcounter", "intro", "Practice", "presep", "dummysep",
+var shuffleSequence = seq("consent", "setcounter", "background", "intro", "Practice", "presep", "dummysep",
                         sepWith("sep", rshuffle(startsWith("cond"), startsWith("filler"))), "exit");
 //var practiceItemTypes = ["Practice"];
 //var progressBarText = ["Progress"];
@@ -37,7 +37,7 @@ var items = [
 
 ["consent", "Form", {consentRequired: true, html: {include: "consent-2016.html" }} ], 
 ["setcounter", "__SetCounter__", { }],   
-["intro", "Form", {consentRequired: true, html: {include: "intro.html" }} ],
+["background", "Form", {consentRequired: true, html: {include: "background.html" }} ],
 ["intro", "Form", {consentRequired: true, html: {include: "intro1.html" }} ],
 ["intro", "Form", {consentRequired: true, html: {include: "intro2.html" }} ],
 ["intro", "Form", {consentRequired: true, html: {include: "intro3.html" }} ],
