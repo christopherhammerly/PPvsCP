@@ -101,6 +101,16 @@ bad.subjects <- vector()
 #   A regular expression to identify those who reported English as their native language 
 data.demo$English <- grepl('[E|e]nglish|ENGLISH',data.demo$natlang)
 
+data.demo$subject.quality <- "0"
+for (cur.subj in levels(data.demo$Subject)) {
+  if (data.demo$English == "FALSE") {
+    data.demo$subject.quality[cur.subj] <- "bad"
+  } 
+  if (data.demo$English != "FALSE"){
+    data.demo$subject.quality[cur.subj] <- "good"
+  }
+}
+
 for (cur.subj in levels(data.demo$Subject)) {
 with(data.demo,
   ifelse(data.demo$English=="FALSE", bad.subjects[[paste0(cur.subj)]] <- "bad", bad.subjects[[paste0(cur.subj)]] <- "good")
