@@ -89,10 +89,18 @@ data.instructions <- data.instructions %>%
   spread(Question,Response) %>%
   droplevels()
 
-#   This variable will end up holding the subject numbers and worker IDs of 
-#   subjects who violated the exclusion criteria
+#   For now, there are separate variables for each criterion type, as I don't
+#   know how to add to lists without overwriting what is already on there.
 
-bad.subjects <- vector()
+language <- {}
+instructions <- {}
+fillers <- {}
+scale <- {}
+repeats <- {}
+
+#   This will be useful if I figure out how to add w/o overwriting
+
+bad.subjects <- {}
 
 #####################################################################
 ###                           Demographics                        ###
@@ -101,15 +109,15 @@ bad.subjects <- vector()
 #   A regular expression to identify those who reported English as their native language 
 data.demo$English <- grepl('[E|e]nglish|ENGLISH',data.demo$natlang)
 
-data.demo$subject.quality <- "0"
+#   This is the best I've done so far at making a bad subjects list based on response to
+#   the native language question:
+
 for (cur.subj in levels(data.demo$Subject)) {
-  if (data.demo$English == FALSE) {
-    data.demo$subject.quality[cur.subj] <- "bad"
-  } 
-  if (data.demo$English == TRUE){
-    data.demo$subject.quality[cur.subj] <- "good"
-  }
+  language <- ifelse(data.demo$English == FALSE, cur.subj, "good")
 }
+
+
+#   Attempt 
 
 for (cur.subj in levels(data.demo$Subject)) {
 with(data.demo,
@@ -117,10 +125,13 @@ with(data.demo,
 )
 }
 
+#   Same as above without the with() function
+
 for (cur.subj in levels(data.demo$Subject)) {
   ifelse(data.demo$English==FALSE, bad.subjects[[paste0(cur.subj)]] <- "bad", bad.subjects[[paste0(cur.subj)]] <- "good")
 }
 
+#   An attempt based on this blog entry: https://www.r-bloggers.com/for-loops-and-how-to-avoid-them/
 
 for (cur.subj in levels(data.demo$Subject)) {
   if (data.demo$English == FALSE) {
@@ -132,8 +143,8 @@ for (cur.subj in levels(data.demo$Subject)) {
   }
 }
 
+#   ORIGINAL CODE
 
-#   Add subjects who did not report their native language as English to bad.subjects list
 for (cur.subj in levels(data.demo$Subject)) {
   if (data.demo$English == "FALSE") {
     bad.subjects[[paste0(cur.subj)]] <- "bad"
@@ -151,6 +162,13 @@ names(correct.answers) = c("advancekey","hands","read","scale","screen","unaccep
 all.answers = as.matrix(data.instructions [,c("advancekey","hands","read","scale","screen","unacceptableresponse","window")])
 data.instructions$accurate.answers = apply(all.answers, 1, identical, correct.answers)
 
+#   New version of creating bad subjects list
+
+for (cur.subj in levels(data.instructions$Subject)) {
+  instructions <- ifelse(data.instructions$accurate.answers == FALSE, cur.subj, "good")
+}
+
+#   BELOW IS MY FIRST STAB AT THIS
 #   Add subjects who did not answer all questions correctly to bad.subjects list
 for (cur.subj in levels(data.instructions$Subject)) {
   if (data.instructions$accurate.answers == "FALSE"){
@@ -182,6 +200,12 @@ mean.ungrammatical.catch <- ungrammatical.catch %>%
   group_by(Subject) %>%
   summarise(mean = mean(Response))
 
+#   NEW CODE
+
+for (cur.subj in levels(data.judge$Subject)) {
+  fillers <- ifelse(mean.ungrammatical.catch$mean > mean.grammatical.catch$mean, cur.subj, "good")
+}
+
 #   Add subjects whose mean rating on the grammatical catch fillers is less than their
 #   mean rating on the ungrammatical catch fillers to bad.subjects list
 
@@ -196,6 +220,16 @@ for (cur.subj in levels(data.judge$Subject)) {
 ###                         Scale usage                           ###
 #####################################################################
 
+#   New code -- I'm not entirely sure that this works perfectly
+
+for (cur.subj in levels(data.judge$Subject)) {
+  cur.data.judge <- subset(data.judge, Subject == cur.subj)
+  cur.table <- table(cur.data.judge$Response)
+  scale <- ifelse(length(cur.table) == 1 | length(cur.table) == 2, cur.subj, "good")
+}
+
+#   Old Code
+
 for (cur.subj in levels(data.judge$Subject)) {
   cur.data.judge <- subset(data.judge, Subject == cur.subj)
   cur.table <- table(cur.data.judge$Response)
@@ -209,7 +243,14 @@ for (cur.subj in levels(data.judge$Subject)) {
 ###                             Repeats                           ###
 #####################################################################
 
-#   Check for repeats in Worker ID
+#   New version, also somewhat buggy
+
+for (cur.subj in levels(data.demo$Subject)) {
+  repeats <- ifelse(duplicated(data.demo$worker_id == TRUE), cur.subj, "good")
+}
+
+
+#   OLD VERSION
 
 for (cur.subj in levels(data.demo$Subject)) {
   if (duplicated(data.demo$worker_id) == "TRUE") {
@@ -222,7 +263,13 @@ for (cur.subj in levels(data.demo$Subject)) {
 ###                         Bad Subjects                          ###
 #####################################################################
 
-#   The command below will print the subject numbers of subjects who should
-#   be excluded 
+print(language)
+print(instructions)
+print(fillers)
+print(scale)
+print(repeats)
+
+#   OUTDATED: The command below will print the subject numbers of subjects who should
+#   be excluded.
 
 print(bad.subjects)
