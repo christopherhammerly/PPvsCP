@@ -92,7 +92,7 @@ data.instructions <- data.instructions %>%
 #   This variable will end up holding the subject numbers and worker IDs of 
 #   subjects who violated the exclusion criteria
 
-bad.subjects <- {}
+bad.subjects <- vector()
 
 #####################################################################
 ###                           Demographics                        ###
@@ -101,12 +101,34 @@ bad.subjects <- {}
 #   A regular expression to identify those who reported English as their native language 
 data.demo$English <- grepl('[E|e]nglish|ENGLISH',data.demo$natlang)
 
+for (cur.subj in levels(data.demo$Subject)) {
+with(data.demo,
+  ifelse(data.demo$English=="FALSE", bad.subjects[[paste0(cur.subj)]] <- "bad", bad.subjects[[paste0(cur.subj)]] <- "good")
+)
+}
+
+for (cur.subj in levels(data.demo$Subject)) {
+  ifelse(data.demo$English=="FALSE", bad.subjects[[paste0(cur.subj)]] <- "bad", bad.subjects[[paste0(cur.subj)]] <- "good")
+}
+
+
+for (cur.subj in levels(data.demo$Subject)) {
+  if (data.demo$English == "FALSE") {
+    bad.subjects[[paste0(cur.subj)]] <- "bad"
+    cat(cur.subj, "was exluded based on non-English native language")
+  } 
+  if (data.demo$English != "FALSE"){
+    bad.subjects[[paste0(cur.subj)]] <- "good"
+  }
+}
+
+
 #   Add subjects who did not report their native language as English to bad.subjects list
 for (cur.subj in levels(data.demo$Subject)) {
   if (data.demo$English == "FALSE") {
-    bad.subjects$Subject <- cur.subj
+    bad.subjects[[paste0(cur.subj)]] <- "bad"
     cat(cur.subj, "was exluded based on non-English native language")
-  }
+  } else bad.subjects[[paste0(cur.subj)]] <- "good"
 }
 
 #####################################################################
