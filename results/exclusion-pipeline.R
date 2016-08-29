@@ -89,16 +89,8 @@ data.instructions <- data.instructions %>%
   spread(Question,Response) %>%
   droplevels()
 
-#   For now, there are separate variables for each criterion type, as I don't
-#   know how to add to lists without overwriting what is already on there.
 
-language <- {}
-instructions <- {}
-fillers <- {}
-scale <- {}
-repeats <- {}
-
-#   This will be useful if I figure out how to add w/o overwriting
+#   List of bad subjects
 
 bad.subjects <- {}
 
@@ -109,48 +101,27 @@ bad.subjects <- {}
 #   A regular expression to identify those who reported English as their native language 
 data.demo$English <- grepl('[E|e]nglish|ENGLISH',data.demo$natlang)
 
-#   This is the best I've done so far at making a bad subjects list based on response to
-#   the native language question:
+data.demo$English <- as.numeric(data.demo$English)
+
+## Here is an attempt with an if statement. This produces an error
 
 for (cur.subj in levels(data.demo$Subject)) {
-  language <- ifelse(data.demo$English == FALSE, cur.subj, "good")
-}
-
-
-#   Attempt 
-
-for (cur.subj in levels(data.demo$Subject)) {
-with(data.demo,
-  ifelse(data.demo$English==FALSE, bad.subjects[[paste0(cur.subj)]] <- "bad", bad.subjects[[paste0(cur.subj)]] <- "good")
-)
-}
-
-#   Same as above without the with() function
-
-for (cur.subj in levels(data.demo$Subject)) {
-  ifelse(data.demo$English==FALSE, bad.subjects[[paste0(cur.subj)]] <- "bad", bad.subjects[[paste0(cur.subj)]] <- "good")
-}
-
-#   An attempt based on this blog entry: https://www.r-bloggers.com/for-loops-and-how-to-avoid-them/
-
-for (cur.subj in levels(data.demo$Subject)) {
-  if (data.demo$English == FALSE) {
-    bad.subjects[[paste0(cur.subj)]] <- "bad"
-    cat(cur.subj, "was exluded based on non-English native language")
-  } 
-  if (data.demo$English != FALSE){
-    bad.subjects[[paste0(cur.subj)]] <- "good"
+  if (data.demo$English[cur.subj]==0) {
+  bad.subjects <- c(bad.subjects, cur.subj)
+  cat(cur.subj, "was exluded due to non-English native language")
   }
 }
 
-#   ORIGINAL CODE
+
+##  Here is an attempt with an ifelse statement. There are no errors, but it puts all
+##  of the subject numbers on the bad.subjects list.
 
 for (cur.subj in levels(data.demo$Subject)) {
-  if (data.demo$English == "FALSE") {
-    bad.subjects[[paste0(cur.subj)]] <- "bad"
-    cat(cur.subj, "was exluded based on non-English native language")
-  } else bad.subjects[[paste0(cur.subj)]] <- "good"
+  ifelse(data.demo$English[] == 0, x <- cur.subj, print("good"))
+  bad.subjects <- c(bad.subjects, x)
 }
+
+
 
 #####################################################################
 ###                         Instuctions                           ###
