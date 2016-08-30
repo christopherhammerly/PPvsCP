@@ -89,11 +89,6 @@ data.instructions <- data.instructions %>%
   spread(Question,Response) %>%
   droplevels()
 
-
-#   List of bad subjects
-
-bad.subjects <- {}
-
 #####################################################################
 ###                           Demographics                        ###
 #####################################################################
@@ -101,26 +96,16 @@ bad.subjects <- {}
 #   A regular expression to identify those who reported English as their native language 
 data.demo$English <- grepl('[E|e]nglish|ENGLISH',data.demo$natlang)
 
+#   Convert booleans to 1 (true) and 0 (false)
 data.demo$English <- as.numeric(data.demo$English)
 
-## Here is an attempt with an if statement. This produces an error
-
-for (cur.subj in levels(data.demo$Subject)) {
-  if (data.demo$English[cur.subj]==0) {
-  bad.subjects <- c(bad.subjects, cur.subj)
-  cat(cur.subj, "was exluded due to non-English native language")
+#   Add subjects that did not self-report as English speakers to bad subjects list
+for (i in 1:length(levels(data.demo$Subject))) {
+  cur.subj <- levels(data.demo$Subject)[i]
+  if (data.demo$English[i] == 0) {
+    cat(paste0(cur.subj," was excluded due to non-English native language\n"), file = "bad.subjects.txt", sep = " ", append = TRUE)
   }
 }
-
-
-##  Here is an attempt with an ifelse statement. There are no errors, but it puts all
-##  of the subject numbers on the bad.subjects list.
-
-for (cur.subj in levels(data.demo$Subject)) {
-  ifelse(data.demo$English[] == 0, x <- cur.subj, print("good"))
-  bad.subjects <- c(bad.subjects, x)
-}
-
 
 
 #####################################################################
@@ -133,18 +118,14 @@ names(correct.answers) = c("advancekey","hands","read","scale","screen","unaccep
 all.answers = as.matrix(data.instructions [,c("advancekey","hands","read","scale","screen","unacceptableresponse","window")])
 data.instructions$accurate.answers = apply(all.answers, 1, identical, correct.answers)
 
-#   New version of creating bad subjects list
+#   Convert boolean values to numeric
+data.instructions$accurate.answers <- as.numeric(data.instructions$accurate.answers)
 
-for (cur.subj in levels(data.instructions$Subject)) {
-  instructions <- ifelse(data.instructions$accurate.answers == FALSE, cur.subj, "good")
-}
-
-#   BELOW IS MY FIRST STAB AT THIS
-#   Add subjects who did not answer all questions correctly to bad.subjects list
-for (cur.subj in levels(data.instructions$Subject)) {
-  if (data.instructions$accurate.answers == "FALSE"){
-    bad.subjects$Subject <- cur.subj
-    cat(cur.subj, "was exluded based on instruction questions")
+#   Add subjects who did not meet criteria to bad subjects list
+for (i in 1:length(levels(data.instructions$Subject))) {
+  cur.subj <- levels(data.instructions$Subject)[i]
+  if (data.instructions$accurate.answers[i] == 0) {
+    cat(paste0(cur.subj," was excluded based on instruction questions\n"), file = "bad.subjects.txt", sep = " ", append = TRUE)
   }
 }
 
@@ -161,52 +142,40 @@ grammatical.catch <- droplevels(subset(data.judge, Item == 57 | Item == 58 | Ite
 
 ungrammatical.catch <- droplevels(subset(data.judge, Item == 93 | Item == 94 | Item == 95 | Item == 96 ))
 
-#   Calculate means for each subject
+#   Calculate means for each subject and put values as columns in "catch"
 
-mean.grammatical.catch <- grammatical.catch %>%
+catch <- grammatical.catch %>%
   group_by(Subject) %>%
-  summarise(mean = mean(Response))
+  summarise(mean.grammatical = mean(Response))
 
-mean.ungrammatical.catch <- ungrammatical.catch %>%
+catch <- ungrammatical.catch %>%
   group_by(Subject) %>%
-  summarise(mean = mean(Response))
-
-#   NEW CODE
-
-for (cur.subj in levels(data.judge$Subject)) {
-  fillers <- ifelse(mean.ungrammatical.catch$mean > mean.grammatical.catch$mean, cur.subj, "good")
-}
+  summarise(mean.ungrammatical = mean(Response)) %>%
+  right_join(catch, by = "Subject")
 
 #   Add subjects whose mean rating on the grammatical catch fillers is less than their
 #   mean rating on the ungrammatical catch fillers to bad.subjects list
 
-for (cur.subj in levels(data.judge$Subject)) {
-  if (mean.ungrammatical.catch$mean > mean.grammatical.catch$mean) {
-    bad.subjects$Subject <- cur.subj
-    cat(cur.subj, "was exluded based on catch fillers")
+for (i in 1:length(levels(catch$Subject))) {
+  cur.subj <- levels(catch$Subject)[i]
+  if (catch$mean.ungrammatical[i] > catch$mean.grammatical[i]) {
+    cat(paste0(cur.subj," was excluded based on catch fillers\n"), file = "bad.subjects.txt", sep = " ", append = TRUE)
   }
 }
+
 
 #####################################################################
 ###                         Scale usage                           ###
 #####################################################################
 
-#   New code -- I'm not entirely sure that this works perfectly
+#   Add subjects who used only one or two values of the scale to bad subjects list
 
-for (cur.subj in levels(data.judge$Subject)) {
-  cur.data.judge <- subset(data.judge, Subject == cur.subj)
-  cur.table <- table(cur.data.judge$Response)
-  scale <- ifelse(length(cur.table) == 1 | length(cur.table) == 2, cur.subj, "good")
-}
-
-#   Old Code
-
-for (cur.subj in levels(data.judge$Subject)) {
+for (i in 1:length(levels(data.judge$Subject))) {
+  cur.subj <- levels(data.judge$Subject)[i]
   cur.data.judge <- subset(data.judge, Subject == cur.subj)
   cur.table <- table(cur.data.judge$Response)
   if (length(cur.table) == 1 | length(cur.table) == 2) {
-    bad.subjects$Subject <- cur.subj 
-    cat(cur.subj, "was exluded based on scale usage")
+    cat(paste0(cur.subj," was excluded based on scale usage\n"), file = "bad.subjects.txt", sep = " ", append = TRUE)
   }
 }
 
@@ -214,33 +183,16 @@ for (cur.subj in levels(data.judge$Subject)) {
 ###                             Repeats                           ###
 #####################################################################
 
-#   New version, also somewhat buggy
+#   Add repeat workers to the bad subjects list
+#
+#   NOTE: This implicates both the original and the repeat. Workers should still be paid for their
+#   first time through, but not for the repeat.
 
-for (cur.subj in levels(data.demo$Subject)) {
-  repeats <- ifelse(duplicated(data.demo$worker_id == TRUE), cur.subj, "good")
-}
+duplicates <- droplevels(data.demo$worker_id[duplicated(data.demo$worker_id)])
 
-
-#   OLD VERSION
-
-for (cur.subj in levels(data.demo$Subject)) {
-  if (duplicated(data.demo$worker_id) == "TRUE") {
-    bad.subjects$Subject <- cur.subj
-    cat(cur.subj, "was exluded based on repeat worker ID")
+for (i in 1:length(levels(data.demo$Subject))) {
+  cur.subj <- levels(data.demo$Subject)[i]
+  if (data.demo$worker_id[i] %in% duplicates) {
+    cat(paste0(cur.subj," was excluded based on repeat worker ID\n"), file = "bad.subjects.txt", sep = " ", append = TRUE) 
   }
 }
-
-#####################################################################
-###                         Bad Subjects                          ###
-#####################################################################
-
-print(language)
-print(instructions)
-print(fillers)
-print(scale)
-print(repeats)
-
-#   OUTDATED: The command below will print the subject numbers of subjects who should
-#   be excluded.
-
-print(bad.subjects)
