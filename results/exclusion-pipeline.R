@@ -8,6 +8,12 @@
 ######              Last Modified: August 2016                      ######
 ##########################################################################
 
+#
+#   TO DO:
+#     - Add variable for catch fillers in preamble
+#     - Make insturction questions easy to modify
+#
+
 #####################################################################
 ###                         Introduction                          ###
 #####################################################################
@@ -112,7 +118,8 @@ for (i in 1:length(levels(data.demo$Subject))) {
 ###                         Instuctions                           ###
 #####################################################################
 
-#   Score questions
+#   Score questions. This can be modified so that the answers to your questions and the names
+#   you chose replace those shown below.
 correct.answers = c("space","yes","silent","all","no","1","maximized")
 names(correct.answers) = c("advancekey","hands","read","scale","screen","unacceptableresponse","window")
 all.answers = as.matrix(data.instructions [,c("advancekey","hands","read","scale","screen","unacceptableresponse","window")])
@@ -136,13 +143,14 @@ for (i in 1:length(levels(data.instructions$Subject))) {
 #   Grammatical: Items 57-60
 #   Ungrammatical: Items 93-96
 
-#   Segregate catch fillers
+#   Segregate catch fillers. This can be modified so the item numbers of your catch
+#   fillers replace those shown below.
 
 grammatical.catch <- droplevels(subset(data.judge, Item == 57 | Item == 58 | Item == 59 | Item == 60 ))
 
 ungrammatical.catch <- droplevels(subset(data.judge, Item == 93 | Item == 94 | Item == 95 | Item == 96 ))
 
-#   Calculate means for each subject and put values as columns in "catch"
+#   Calculate means on catch fillers for each subject and put values as columns in "catch"
 
 catch <- grammatical.catch %>%
   group_by(Subject) %>%
