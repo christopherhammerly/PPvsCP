@@ -46,7 +46,7 @@
 #   This section includes the packages necessary to execute the pipeline.
 #
 #   If you do not have a given package, you can install it with the following command:
-#   install.packages("PACKAGE.NAME")
+#   install.packages("PACKAGE.NAME"). Remember to use quotations around the name.
 
 library(tidyr)
 library(dplyr)
@@ -56,11 +56,12 @@ library(ez)
 ###                           Data Prep                           ###
 #####################################################################
 
-#   Create column names for the data file. These labels are geared towards acceptablity judgments
+#   Create column names for the data file. These labels are geared towards acceptablity judgments.
+#   Modifying these column names will have effects downstream, so do so at your own risk.
 
 mycols <- c("Subject","MD5","TrialType","Number","Element","Experiment","Item", "Question", "Response","null","RT","null")
 
-#   Read in data. Add the filepath where your results are kept.
+#   Read in data. Modify the filepath to indicate where your results are kept.
 
 data.raw <- read.csv('/Users/chrishammerly/PPvsCP/results/results.csv',
                      header = 0, 
@@ -78,7 +79,7 @@ data.judge$Response <- as.numeric(as.character(data.judge$Response))
 
 #   Segregate the demographic data and Worker ID. Demographic questions 
 #   should be in a form with a uniquely identifying label to allow them 
-#   to be pulled out.
+#   to be pulled out -- in this case, the label "background".
 
 data.demo <- droplevels(subset(data.raw, Experiment == 'background' | Experiment == "exit"))
 data.demo <- data.demo %>%
@@ -87,7 +88,8 @@ data.demo <- data.demo %>%
   droplevels()
 
 #   Segregate the instruction questions. Again, the form for these questions
-#   should be unique to allow easy identification.
+#   should be unique to allow easy identification -- in this case, they are
+#   labeled "intro".
 
 data.instructions <- droplevels(subset(data.raw, Experiment == 'intro'))
 data.instructions <- data.instructions %>%
