@@ -206,3 +206,22 @@ for (i in 1:length(levels(data.demo$Subject))) {
     cat(paste0(cur.subj," was excluded based on repeat worker ID\n"), file = "bad.subjects.txt", sep = " ", append = TRUE) 
   }
 }
+
+#
+
+#   1473195073 was excluded based on catch fillers (Batch 4)
+#   1473339213 was excluded based on catch fillers 
+#   1473340057 was excluded based on catch fillers 
+#   1473356919 was excluded based on catch fillers 
+#   1473375948 was excluded based on catch fillers (Batch 19)
+#   1473432095 was excluded based on catch fillers (Batch 21)
+#   1473432829 was excluded based on catch fillers (Batch 23)
+
+#   1473208710 was excluded based on instruction questions (Batch 5)
+
+#   1473265118 was excluded based on repeat worker ID (Batch 8)
+#   1473432095 was excluded based on repeat worker ID (see also catch fillers)
+
+data.judge.trimmed <- subset(data.judge, Subject != "1473195073" & Subject != "1473339213" & Subject != "1473340057" & Subject != "1473356919" & Subject != "1473208710" & Subject != "1473265118" & Subject != "1473375948" & Subject != "1473432095" & Subject != "1473432829")
+
+xtabs(~ Item + Experiment, data = data.judge.trimmed)
