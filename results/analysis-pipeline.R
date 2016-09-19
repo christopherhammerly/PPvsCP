@@ -3,7 +3,7 @@
 ###             PP vs CP in attraction                            ###
 ###               Judgement + Chunked SPR analysis pipeline       ###
 ###             Christopher Hammerly                              ###
-###             UMass Amherst - 09.06.16                          ###
+###             UMass Amherst - 09.13.16                          ###
 ###                                                               ###
 #####################################################################
 
@@ -27,17 +27,22 @@
 #   has/have = 41-48
 #
 #   TO DO:
-#     - Add exclusion criteria
-#     - 
+#     - Create the mixture and bimodal models a la Which Flowers for judgment data
+#
+#
+#
+
+
+#   Packages necessary for analysis
 
 library(dplyr)
+library(tidyr)
 library(ggplot2)
-library(downloader)
+library(ggmap)
 library(ez)
 library(lme4)
 library(grid)
 library(gridExtra)
-library(multcomp)
 library(car)
 
 #   A function that gets around the issue of turning factors numeric
@@ -60,16 +65,68 @@ data.raw <- read.csv('/Users/chrishammerly/PPvsCP/results/results.csv',
 
 data.raw$Subject <- as.factor(data.raw$Subject)
 
-#   Remove subjects who were not paid on MTurk due to violating exclusion criteria
+#   Remove subjects who were not paid on MTurk due to violating exclusion criteria (determined in
+#   exclusion-pipeline.R)
 
 excluded.subjects <- c("1473195073","1473339213","1473340057","1473356919","1473208710","1473265118","1473375948","1473432095","1473432829")
 data.raw <- droplevels(subset(data.raw, !(Subject %in% excluded.subjects)))
 
-#   Remove fillers
+#   Create frame for demographic information
 
-exp.data <- subset(data.raw , Experiment %in% c('cond-A', 'cond-B', 'cond-C','cond-D','cond-E','cond-F','cond-G','cond-H'))
+data.demo <- droplevels(subset(data.raw, Experiment == 'background' | Experiment == "exit"))
+data.demo <- data.demo %>%
+  select(Subject,Question,Response) %>%
+  spread(Question,Response) %>%
+  droplevels()
+
+#   Create graphic that shows where participants are from by state
+
+states <- tolower(data.demo$state)
+states <- gsub(" $","", states, perl=T)
+for (i in 1:length(states)) {
+  if (nchar(states[i]) > 2) {
+    states[i] = state.abb[match(states[i] ,tolower(state.name))]
+  }
+}
+
+states <- toupper(states)
+data.demo$state <- states
+
+state.data <- data.frame(states = table(states))
+state.data$x <- state.center$x[match(state.data$states.states ,state.abb)]
+state.data$y<- state.center$y[match(state.data$states.states ,state.abb)]
+names(state.data) <- c("State","Frequency","x","y")
+
+#   TO DO: Figure out how to include all frequencies, maybe do shading by state
+
+map <- get_map(location = 'USA', zoom = 4,maptype="roadmap")
+location.plot <- ggmap(map) + 
+  geom_point(aes(x = x, y = y, size = Frequency), data = state.data, alpha = .5)+ 
+  scale_size_continuous(range = range(state.data$Frequency))
+
+pdf('location.pdf')
+location.plot
+dev.off()
+
+#   Regioning information
+
+W <- data.frame(Region = "W", state = c("CA","NV","OR","WA","ID","MT","WY","CO","UT"))
+SW <- rbind(W,data.frame(Region="SW",state=c("AZ","NM","OK","TX")))
+MW <- rbind(SW,data.frame(Region="MW",state=c("ND","SD","NE","KS","MN","IA","MO","WI","MI","IL","IN","OH")))
+NE <- rbind(MW,data.frame(Region="NE",state=c("NY","RI","CT","VT","NH","ME","MA","NJ","PA")))
+Region.key <- rbind(NE,data.frame(Region="SE",state=c("AR","AL","LA","MS","TN","KY","WV","DC","VA","NC","SC","GA","FL","DE","MD")))
+Region.key$state <- as.character(Region.key$state)
+
+#   Add regions and states to raw data file
+
+data.demo.state <- data.demo[c(1,11)]
+data.raw <- data.raw  %>%
+  right_join(data.demo.state) %>%
+  right_join(Region.key)
 
 #   Add columns for factors and levels
+
+exp.data <- data.raw
 
 exp.data$Modifier <- ifelse(exp.data$Experiment=='cond-A' | exp.data$Experiment=='cond-B' | exp.data$Experiment=='cond-C' | exp.data$Experiment=='cond-D', 'RC', 'PP')
 exp.data$Grammaticality <- ifelse(exp.data$Experiment=='cond-A' | exp.data$Experiment=='cond-B' | exp.data$Experiment=='cond-E' | exp.data$Experiment=='cond-F', 'grammatical', 'ungrammatical')
@@ -78,23 +135,33 @@ exp.data$Attractor <- ifelse(exp.data$Experiment=='cond-A' | exp.data$Experiment
 #   Add column for verb type
 
 exp.data$Item <- as.numeric.factor(exp.data$Item)
- 
+
 exp.data$Verb <- ifelse(exp.data$Item >=1 & exp.data$Item <= 14, "was/were", 
-                         ifelse(exp.data$Item >=15 & exp.data$Item <= 30, "lexical",
-                                ifelse(exp.data$Item >=31 & exp.data$Item <= 40, "is/are",
-                                       ifelse(exp.data$Item >=40 & exp.data$Item <= 48,"has/have","filler"))))
+                        ifelse(exp.data$Item >=15 & exp.data$Item <= 30, "lexical",
+                               ifelse(exp.data$Item >=31 & exp.data$Item <= 40, "is/are",
+                                      ifelse(exp.data$Item >=40 & exp.data$Item <= 48,"has/have","filler"))))
+data.raw <- exp.data
 
-#   Separate judgement data
+#   Calculate z-scores for judgments over all items including fillers and plot them
 
-data.acceptability <- droplevels(subset(exp.data, TrialType == 'Question'))
+data.all.judgments <- subset(data.raw , Experiment %in% c('cond-A', 'cond-B', 'cond-C','cond-D','cond-E','cond-F','cond-G','cond-H','filler') & TrialType == 'Question')
+data.all.judgments$Response <- as.numeric(as.character(data.all.judgments$Response))
 
-data.acceptability$Response <- as.numeric(as.character(data.acceptability$Response))
-data.acceptability$RT <- as.numeric(as.character(data.acceptability$RT))
+data.all.judgments$z <- ave(data.all.judgments$Response, data.all.judgments$Subject, FUN = scale)
+
+ggplot(data.all.judgments,aes(x=z))+
+  geom_histogram(binwidth=.1)+
+  ggtitle("JUDGMENT Z-SCORE DISTRIBUTION\n FOR ALL ITEMS")
+
+#   Separate and remove fillers from acceptability data
+
+data.acceptability <- subset(data.all.judgments, Experiment %in% c('cond-A', 'cond-B', 'cond-C','cond-D','cond-E','cond-F','cond-G','cond-H'))
+
 
 #   Separate SPR data and rename column headings
 
-data.spr <- subset(exp.data, TrialType == 'DashedSentence')
-names(data.spr) <- c("Subject","MD5","TrialType","Number","Element","Experiment","Item", "region", "fragment","RT","null","sentence","Modifier","Grammaticality","Attractor","Verb")
+data.spr <- subset(exp.data, Experiment %in% c('cond-A', 'cond-B', 'cond-C','cond-D','cond-E','cond-F','cond-G','cond-H') & TrialType == 'DashedSentence')
+names(data.spr) <- c("Subject","MD5","TrialType","Number","Element","Experiment","Item", "region", "fragment","RT","null","sentence","state","Region","Modifier","Grammaticality","Attractor","Verb")
 
 data.spr$RT <- as.numeric(as.character(data.spr$RT))
 
@@ -110,7 +177,7 @@ data.spr$ID <- paste(data.spr$Subject,data.spr$Item)
 data.acceptability <- droplevels((subset(data.acceptability, !(ID %in% bad.trials$ID))))
 data.spr <- droplevels((subset(data.spr, !(ID %in% bad.trials$ID))))
 
-### a sanity check to ensure the correct number of subjects have been processed through both files
+### a sanity check to ensure the correct number of subjects have been processed through in both files
 print(data.acceptability %>% summarise(number = n_distinct(Subject)))
 print(data.spr %>% summarise(number = n_distinct(Subject)))
 
@@ -123,47 +190,74 @@ print(data.spr %>% summarise(number = n_distinct(Subject)))
 
 #   Histogram of judgments from experimental items only (i.e. no fillers)
 
-ggplot(data.acceptability,aes(x=Response))+
+judge.all.exp <- ggplot(data.acceptability,aes(x=Response))+
   geom_histogram(binwidth=1)+
   ggtitle("JUDGMENT DISTRIBUTION\n FOR EXPERIMENTAL ITEMS")
 
+pdf('judge.all.exp.PDF')
+judge.all.exp
+dev.off()
+
+#   Very rough box plots to get an idea of reponses by item and by subject
+
+boxplot(data.acceptability$Response ~ data.acceptability$Item)
+
+boxplot(data.acceptability$Response ~ data.acceptability$Subject)
+
+#   Plot z-scores for experimental items
+
+ggplot(data.acceptability,aes(x=z))+
+  geom_histogram(binwidth=.1)+
+  ggtitle("JUDGMENT Z-SCORE DISTRIBUTION\n FOR EXPERIMENTAL ITEMS")
+
 #   Histograms of judgments for all condtions. This organizes them into a 2 x 4 grid.
 
-PP.attract <- subset(data.acceptability, Experiment == "cond-H")
-RC.attract <- subset(data.acceptability, Experiment == "cond-D")
-PP.gramm <- subset(data.acceptability, Experiment == "cond-E")
-PP.ungramm <- subset(data.acceptability, Experiment == "cond-G")
-RC.gramm <- subset(data.acceptability, Experiment == "cond-A")
-RC.ungramm <- subset(data.acceptability, Experiment == "cond-C")
-PP.gramm.attract <- subset(data.acceptability, Experiment == "cond-F")
-RC.gramm.attract <- subset(data.acceptability, Experiment == "cond-B")
+PP.SPP <- subset(data.acceptability, Experiment == "cond-H")
+RC.SPP <- subset(data.acceptability, Experiment == "cond-D")
+PP.SSS <- subset(data.acceptability, Experiment == "cond-E")
+PP.SSP <- subset(data.acceptability, Experiment == "cond-G")
+RC.SSS <- subset(data.acceptability, Experiment == "cond-A")
+RC.SSP <- subset(data.acceptability, Experiment == "cond-C")
+PP.SPS <- subset(data.acceptability, Experiment == "cond-F")
+RC.SPS <- subset(data.acceptability, Experiment == "cond-B")
 
-PP.SPP.hist <- ggplot(PP.attract,aes(x=Response))+
+PP.SPP.hist <- ggplot(PP.SPP,aes(x=Response))+
   geom_histogram(binwidth=1)+
-  ggtitle("JUDGMENT DISTRIBUTION\n FOR PP *SPP CONDITION")
-RC.SPP.hist <- ggplot(RC.attract,aes(x=Response))+
+  ggtitle("PP *SPP")+
+  ylim(0,90)
+RC.SPP.hist <- ggplot(RC.SPP,aes(x=Response))+
   geom_histogram(binwidth=1)+
-  ggtitle("JUDGMENT DISTRIBUTION\n FOR RC *SPP CONDITION")
-PP.SPS.hist <- ggplot(PP.gramm.attract,aes(x=Response))+
+  ggtitle("RC *SPP")+
+  ylim(0,90)
+PP.SPS.hist <- ggplot(PP.SPS,aes(x=Response))+
   geom_histogram(binwidth=1)+
-  ggtitle("JUDGMENT DISTRIBUTION\n FOR PP SPS CONDITION")
-RC.SPS.hist <- ggplot(RC.gramm.attract,aes(x=Response))+
+  ggtitle("PP SPS")+
+  ylim(0,150)
+RC.SPS.hist <- ggplot(RC.SPS,aes(x=Response))+
   geom_histogram(binwidth=1)+
-  ggtitle("JUDGMENT DISTRIBUTION\n FOR RC SPS CONDITION")
-PP.SSS.hist <- ggplot(PP.gramm,aes(x=Response))+
+  ggtitle("RC SPS")+
+  ylim(0,150)
+PP.SSS.hist <- ggplot(PP.SSS,aes(x=Response))+
   geom_histogram(binwidth=1)+
-  ggtitle("JUDGMENT DISTRIBUTION\n FOR PP SSS CONDITION")
-PP.SSP.hist <- ggplot(PP.ungramm,aes(x=Response))+
+  ggtitle("PP SSS")+
+  ylim(0,160)
+PP.SSP.hist <- ggplot(PP.SSP,aes(x=Response))+
   geom_histogram(binwidth=1)+
-  ggtitle("JUDGMENT DISTRIBUTION\n FOR PP *SSP CONDITION")
-RC.SSS.hist <- ggplot(RC.gramm,aes(x=Response))+
+  ggtitle("PP *SSP")+
+  ylim(0,90)
+RC.SSS.hist <- ggplot(RC.SSS,aes(x=Response))+
   geom_histogram(binwidth=1)+
-  ggtitle("JUDGMENT DISTRIBUTION\n FOR RC SSS CONDITION")
-RC.SSP.hist <- ggplot(RC.ungramm,aes(x=Response))+
+  ggtitle("RC SSS")+
+  ylim(0,160)
+RC.SSP.hist <- ggplot(RC.SSP,aes(x=Response))+
   geom_histogram(binwidth=1)+
-  ggtitle("JUDGMENT DISTRIBUTION\n FOR RC *SSP CONDITION")
+  ggtitle("RC *SSP")+
+  ylim(0,90)
 
+pdf('judgement.dist.by.cond.pdf')
 grid.arrange(PP.SSS.hist, PP.SSP.hist, PP.SPS.hist, PP.SPP.hist, RC.SSS.hist, RC.SSP.hist, RC.SPS.hist, RC.SPP.hist, ncol = 4, nrow = 2)
+dev.off()
+
 
 #   Create a data frame with the mean response for each participant on each condition
 
@@ -284,27 +378,48 @@ raw.PP <- ggplot(PP.summ,aes(x=Grammaticality,y=mean_cond,fill=Attractor))+
   ylab("MEAN RATING")+
   ylim(0,7)+
   ggtitle("PP Modifier")
+
+pdf("Means-SEM-by-condition.PDF")
 grid.arrange(raw.PP, raw.RC, ncol=2)
+dev.off()
 
 #   Figures to display difference scores
 
-ggplot(aes(y = mean.diff, x = Grammaticality, fill = Attractor), data = differences.summary.modifier)+
+modifier.diff <- ggplot(aes(y = mean.diff, x = Grammaticality, fill = Attractor), data = differences.summary.modifier)+
   geom_bar(position='dodge',stat = "identity")+
   geom_errorbar(aes(ymin=ci.lower.mean, ymax=ci.upper.mean), position = dodge, width=0.1)+
   scale_fill_manual(values=c("navy","maroon","grey"))+
-  ylab("PP - RC")
+  ylab("PP - RC")+
+  ggtitle("JUDGEMENT DIFFERENCE SCORES\n FOR MODIFIER TYPE")
 
-ggplot(aes(y = mean.diff, x = Modifier, fill = Attractor), data = differences.summary.grammaticality)+
+grammaticality.diff <- ggplot(aes(y = mean.diff, x = Modifier, fill = Attractor), data = differences.summary.grammaticality)+
   geom_bar(position='dodge',stat = "identity")+
   geom_errorbar(aes(ymin=ci.lower.mean, ymax=ci.upper.mean), position = dodge, width=0.1)+
   scale_fill_manual(values=c("navy","maroon","grey"))+
-  ylab("Grammatical - Ungrammatical")
+  ylab("Grammatical - Ungrammatical")+
+  ggtitle("JUDGEMENT DIFFERENCE SCORES\n FOR GRAMMATICALITY")
 
-ggplot(aes(y = mean.diff, x = Modifier, fill = Grammaticality), data = differences.summary.attractor)+
+attractor.diff <- ggplot(aes(y = mean.diff, x = Modifier, fill = Grammaticality), data = differences.summary.attractor)+
   geom_bar(position='dodge',stat = "identity")+
   geom_errorbar(aes(ymin=ci.lower.mean, ymax=ci.upper.mean), position = dodge, width=0.1)+
   scale_fill_manual(values=c("navy","maroon","grey"))+
-  ylab("Plural - Singular")
+  ylab("Plural - Singular")+
+  ggtitle("JUDGEMENT DIFFERENCE SCORES\n FOR ATTRACTOR NUMBER")
+
+pdf("attractor.diff.judgment.PDF")
+attractor.diff
+dev.off()
+
+#   PLOT FOR THE CONFIDENCE INTERVALS
+
+ggplot(data=differences.summary.attractor,aes(x=mean.sem,y=Modifier,color = Grammaticality))+
+  geom_point()+ 
+  theme(text = element_text(size=10))+ 
+  geom_errorbarh(aes(xmax = ci.upper.mean, xmin = ci.lower.mean, height=.1))+ 
+  theme(axis.title.y = element_blank(), axis.text.y=element_text(colour="Black"))+ 
+  scale_x_continuous(name="Number mismatch effect (+/- 95% CI)") +
+  scale_y_discrete(limits = rev(levels(differences.summary.attractor$Modifier)) )+
+  scale_color_manual(values=c("Blue","Red"))
 
 #   Hypothesis testing
 
@@ -404,10 +519,34 @@ t.test(grammatical.RC.diff$Difference)
 ###                                           ###
 #################################################
 
-ggplot(data.spr,aes(x=RT))+
+#   Raw SPR RT distribution for all items and regions
+
+raw.spr.dist <- ggplot(data.spr,aes(x=RT))+
   geom_histogram(binwidth=50)+
   xlim(0,7000)+
-  ggtitle("SPR RT DISTRIBUTION")
+  ggtitle("RAW SPR RT DISTRIBUTION")
+
+#   Add log transformed RT as a column in data.spr. This will be used for most analyses
+
+data.spr$logRT <- log(data.spr$RT)
+
+#   Log RT distribution across experimental conditions
+
+log.spr.dist <- ggplot(data.spr,aes(x=logRT))+
+  geom_histogram(binwidth=.1)+
+  xlim(4,9)+
+  ggtitle("SPR LOG(RT) DISTRIBUTION")
+
+pdf("spr.dist.PDF")
+grid.arrange(raw.spr.dist,log.spr.dist,ncol = 2)
+dev.off()
+
+#   Split the data from region 3 and 4
+
+region3.spr <- droplevels(subset(data.spr, region == 3))
+region4.spr <- droplevels(subset(data.spr, region == 4))
+
+#   Separate out the distributions by condition for region 3
 
 PP.attract.spr <- subset(data.spr, Experiment == "cond-H" & region == 3)
 RC.attract.spr <- subset(data.spr, Experiment == "cond-D" & region == 3)
@@ -419,6 +558,7 @@ PP.ungramm.spr <- subset(data.spr, Experiment == "cond-G" & region == 3)
 RC.gramm.spr <- subset(data.spr, Experiment == "cond-A" & region == 3)
 RC.ungramm.spr <- subset(data.spr, Experiment == "cond-C" & region == 3)
 
+#   Plot the distributions by condition for region 3
 
 PP.SPP.spr <- ggplot(PP.attract.spr,aes(x=RT))+
   geom_histogram(binwidth=50)+
@@ -452,15 +592,9 @@ RC.SPS.spr <- ggplot(RC.gramm.attract.spr,aes(x=RT))+
   geom_histogram(binwidth=50)+
   xlim(0,7000)+
   ggtitle("SPR RT DISTRIBUTION\n FOR RC SPS REGION 3")
-
 grid.arrange(PP.SSS.spr,PP.SSP.spr,PP.SPS.spr,PP.SPP.spr,RC.SSS.spr,RC.SSP.spr,RC.SPS.spr, RC.SPP.spr,ncol = 4, nrow = 2)
 
-#   Split the data from region 3 and 4
-
-region3.spr <- droplevels(subset(data.spr, region == 3))
-region4.spr <- droplevels(subset(data.spr, region == 4))
-
-#   Condition summaries for raw RT
+#   Condition summaries for raw RT: Gives mean and SEM by region. This is plotted later
 
 RT.subj.by.cond <- data.spr %>%
   group_by(Subject, Experiment, Modifier, Grammaticality, Attractor, region) %>%
@@ -471,14 +605,6 @@ RT.cond.summ <- RT.subj.by.cond %>%
   summarise(mean = mean(average),
             SEM = sd(average)/sqrt(n_distinct(Subject)))
 
-#   Add log transformed RT as a column in data.spr
-
-data.spr$logRT <- log(data.spr$RT)
-
-ggplot(data.spr,aes(x=logRT))+
-  geom_histogram(binwidth=.1)+
-  xlim(4,9)+
-  ggtitle("SPR LOG(RT) DISTRIBUTION")
 
 #   Summaries by condition and region for log transformed RT
 
@@ -491,7 +617,7 @@ log.RT.cond.summ <- log.RT.subj.by.cond %>%
   summarise(mean = mean(average),
             SEM = sd(average)/sqrt(n_distinct(Subject)))
 
-#   Difference scores and CIs for attractor number for region 3
+#   Difference scores and CIs for attractor number for region 3 using log(RT)
 
 log.RT.differences.by.subj.attractor <- region3.spr %>% 
   group_by(Subject,Modifier,Grammaticality) %>%
@@ -519,7 +645,7 @@ log.RT.differences.summary.attractor <- log.RT.differences.by.subj.attractor %>%
          ci.upper.mean = mean.diff + qt(.975,df=N-1)*mean.sem
   )
 
-#   Difference scores and CIs for attractor number for region 4
+#   Difference scores and CIs for attractor number for region 4 using log RT
 
 log.RT.differences.by.subj.attractor.r4 <- region4.spr %>% 
   group_by(Subject,Modifier,Grammaticality) %>%
@@ -572,22 +698,9 @@ PP.spr.raw <- ggplot(subset(RT.cond.summ,Experiment %in% c("cond-E","cond-F","co
   ylim(500,1500)+
   ggtitle("PP-MODIFIER SPR RAW RT")
 
+pdf(file = "raw-spr.PDF", width = 20, height = 10)
 grid.arrange(PP.spr.raw,RC.spr.raw,ncol=2)
-
-#   Difference score plotting
-#   TO DO: ADD TITLE TO HELP DISTINGUISH REGIONS
-
-ggplot(aes(y = mean.diff, x = Modifier, fill = Grammaticality), data = log.RT.differences.summary.attractor)+
-  geom_bar(position='dodge',stat = "identity")+
-  geom_errorbar(aes(ymin=ci.lower.mean, ymax=ci.upper.mean), position = dodge, width=0.1)+
-  scale_fill_manual(values=c("navy","maroon","grey"))+
-  ylab("Plural - Singular")
-
-ggplot(aes(y = mean.diff, x = Modifier, fill = Grammaticality), data = log.RT.differences.summary.attractor.r4)+
-  geom_bar(position='dodge',stat = "identity")+
-  geom_errorbar(aes(ymin=ci.lower.mean, ymax=ci.upper.mean), position = dodge, width=0.1)+
-  scale_fill_manual(values=c("navy","maroon","grey"))+
-  ylab("Plural - Singular")
+dev.off()
 
 #### Plotting log transformed RT data
 
@@ -602,7 +715,6 @@ log.RC.spr <- ggplot(subset(log.RT.cond.summ,Experiment %in% c("cond-A","cond-B"
   ylim(6.25,7.25)+
   ggtitle("RC-MODIFIER SPR LOG TRANSFORMED RT")
 
-
 log.PP.spr <- ggplot(subset(log.RT.cond.summ,Experiment %in% c("cond-E","cond-F","cond-G","cond-H")),aes(x=region,y=mean,color=Experiment,base=6,group=Experiment))+ 
   labs(y="Reading time",x="Region",group=1) +geom_point(stat = "identity",size=1)+
   geom_errorbar(aes(ymax = mean+SEM,ymin=mean-SEM,width=0.05))+ 
@@ -614,7 +726,29 @@ log.PP.spr <- ggplot(subset(log.RT.cond.summ,Experiment %in% c("cond-E","cond-F"
   ylim(6.25,7.25)+
   ggtitle("PP-MODIFIER SPR LOG TRANSFORMED RT")
 
+pdf(file = "log-spr.PDF", width = 20, height = 10)
 grid.arrange(log.PP.spr,log.RC.spr,ncol=2)
+dev.off()
+
+#   Difference score plotting for regions 3 and 4 for attractor number
+
+difference.region3 <- ggplot(aes(y = mean.diff, x = Modifier, fill = Grammaticality), data = log.RT.differences.summary.attractor)+
+  geom_bar(position='dodge',stat = "identity")+
+  geom_errorbar(aes(ymin=ci.lower.mean, ymax=ci.upper.mean), position = dodge, width=0.1)+
+  scale_fill_manual(values=c("navy","maroon","grey"))+
+  ylab("Plural - Singular")+
+  ggtitle("LOG RT DIFFERENCE SCORES\n FOR ATTRACTOR NUMBER IN REGION 3")
+
+difference.region4 <- ggplot(aes(y = mean.diff, x = Modifier, fill = Grammaticality), data = log.RT.differences.summary.attractor.r4)+
+  geom_bar(position='dodge',stat = "identity")+
+  geom_errorbar(aes(ymin=ci.lower.mean, ymax=ci.upper.mean), position = dodge, width=0.1)+
+  scale_fill_manual(values=c("navy","maroon","grey"))+
+  ylab("Plural - Singular")+
+  ggtitle("LOG RT DIFFERENCE SCORES\n FOR ATTRACTOR NUMBER IN REGION 4")
+
+pdf(file = "difference-attractor-spr.PDF",height = 5, width = 10)
+grid.arrange(difference.region3,difference.region4,ncol=2)
+dev.off()
 
 #   Hypothesis testing for SPR
 
@@ -683,7 +817,7 @@ ggplot(log.RT.grammatical.RC.diff,aes(x=Difference))+
 t.test(log.RT.grammatical.RC.diff$Difference)
 
 #   Set up t-test to compare the dfferences between singular and plural in ungrammatical sentences with
-#   PP modifiers in log RT in region 3
+#   PP modifiers in log RT in region 4
 
 log.RT.ungrammatical.PP.diff.r4 <- subset(log.RT.differences.by.subj.attractor.r4, Modifier == "PP" & Grammaticality == "ungrammatical")
 ggplot(log.RT.ungrammatical.PP.diff,aes(x=Difference))+
@@ -693,7 +827,7 @@ ggplot(log.RT.ungrammatical.PP.diff,aes(x=Difference))+
 t.test(log.RT.ungrammatical.PP.diff.r4$Difference)
 
 #   Set up t-test to compare the dfferences between singular and plural in ungrammatical sentences with
-#   RC modifiers in log RT in region 3
+#   RC modifiers in log RT in region 4
 
 log.RT.ungrammatical.RC.diff.r4  <- subset(log.RT.differences.by.subj.attractor.r4, Modifier == "RC" & Grammaticality == "ungrammatical")
 ggplot(log.RT.ungrammatical.RC.diff,aes(x=Difference))+
@@ -703,7 +837,7 @@ ggplot(log.RT.ungrammatical.RC.diff,aes(x=Difference))+
 t.test(log.RT.ungrammatical.RC.diff.r4$Difference)
 
 #   Set up t-test to compare the dfferences between singular and plural in grammatical sentences with
-#   PP modifiers in log RT in region 3
+#   PP modifiers in log RT in region 4
 
 log.RT.grammatical.PP.diff.r4 <- subset(log.RT.differences.by.subj.attractor.r4, Modifier == "PP" & Grammaticality == "grammatical")
 ggplot(log.RT.grammatical.PP.diff,aes(x=Difference))+
@@ -721,6 +855,240 @@ ggplot(log.RT.grammatical.RC.diff.r4,aes(x=Difference))+
   ggtitle("DISTRUBTION OF PL - SG LOG RT DIFFERENCE SCORES\n FOR GRAMMATICAL RC MODIFIERS")
 
 t.test(log.RT.grammatical.RC.diff.r4$Difference)
+
+#################################################
+###                                           ###
+###           Contingency Analysis            ###
+###                                           ###
+#################################################
+
+quantile(data.acceptability$z, probs = c(0.33,0.66))
+
+#   25%          75% 
+#   -0.8150370   0.8476354 
+
+grammatical.trials <- droplevels(subset(data.acceptability, data.acceptability$z > 0.6235734))
+ungrammatical.trials <- droplevels(subset(data.acceptability, data.acceptability$z < -0.4971533))
+
+summary(grammatical.trials$Experiment)
+summary(ungrammatical.trials$Experiment)
+
+#   Bin each SPR trial into gramamtical and ungrammatical bins depending on judgment
+
+data.spr$bin <- ifelse(data.spr$ID %in% grammatical.trials$ID,"grammatical", ifelse(data.spr$ID %in% ungrammatical.trials$ID,"ungrammatical","middle"))
+
+data.spr.trimmed <- droplevels(subset(data.spr, bin != "middle"))
+#   FIGURE OUT HOW IT MAKES SENSE TO ACTUALLY ANALYZE AND PRESENT THIS
+
+#   Isolate the SPP trials and see if differences emerge depending on binning
+
+data.spr.SPP <- droplevels(subset(data.spr.trimmed, Experiment == "cond-D" | Experiment == "cond-H"))
+
+SPP.log.RT.subj.by.cond <- data.spr.SPP %>%
+  group_by(Subject, bin, Modifier, region) %>%
+  summarise(average = mean(logRT))
+
+SPP.log.RT.cond.summ <- SPP.log.RT.subj.by.cond %>%
+  group_by(bin,Modifier, region) %>%
+  summarise(mean = mean(average),
+            SEM = sd(average)/sqrt(n_distinct(Subject)))
+
+SPP.log.RT.cond.summ$ID <- paste(SPP.log.RT.cond.summ$bin,SPP.log.RT.cond.summ$Modifier)
+
+SPP.contigency <- ggplot(SPP.log.RT.cond.summ,aes(x=region,y=mean,color=ID,base=6,group=ID))+ 
+  labs(y="Reading time",x="Region",group=1) +
+  geom_point(stat = "identity",size=1)+
+  geom_errorbar(aes(ymax = mean+SEM,ymin=mean-SEM,width=0.05))+ 
+  theme(text = element_text(size=10))+
+  stat_identity(geom="line")+
+  scale_colour_manual(values = c("steelblue2","firebrick2","navyblue","firebrick4"),
+                      name="Bin + Modifier",
+                      labels= c("grammatical PP","ungrammatical PP","grammatical RC","ungrammatical RC"),
+                      breaks= c("grammatical PP","ungrammatical PP","grammatical RC","ungrammatical RC"))+
+  ylim(6,7.25)+
+  ggtitle("SPR LOG TRANSFORMED RT\nSPP CONDITION BY BIN AND MODIFIER")
+
+pdf("spp.contingency.PDF")
+SPP.contigency
+dev.off()
+
+#   The generalization here is that in the ungrammatical *SPP condition, in the cases where the sentence
+#   was ultimately judged like an ungrammatical sentence, the sentence was read slower in the region
+#   containing the verb. The cases where it was judged as a grammatical sentence diverge. When there is
+#   a PP modifier the critical region is read more slowly relative to the cases with an RC modifier.
+
+#   Isolate the SPS trials and see if differences emerge depending on binning
+
+data.spr.SPS <- droplevels(subset(data.spr.trimmed, Experiment == "cond-B" | Experiment == "cond-F"))
+
+SPS.log.RT.subj.by.cond <- data.spr.SPS %>%
+  group_by(Subject, bin, Modifier, region) %>%
+  summarise(average = mean(logRT))
+
+SPS.log.RT.cond.summ <- SPS.log.RT.subj.by.cond %>%
+  group_by(bin,Modifier, region) %>%
+  summarise(mean = mean(average),
+            SEM = sd(average)/sqrt(n_distinct(Subject)))
+
+SPS.log.RT.cond.summ$ID <- paste(SPS.log.RT.cond.summ$bin,SPS.log.RT.cond.summ$Modifier)
+
+SPS.contingency <- ggplot(SPS.log.RT.cond.summ,aes(x=region,y=mean,color=ID,base=6,group=ID))+ 
+  labs(y="Reading time",x="Region",group=1) +
+  geom_point(stat = "identity",size=1)+
+  geom_errorbar(aes(ymax = mean+SEM,ymin=mean-SEM,width=0.05))+ 
+  theme(text = element_text(size=10))+
+  stat_identity(geom="line")+
+  scale_colour_manual(values = c("steelblue2","firebrick2","navyblue","firebrick4"),
+                      name="Bin + Modifier",
+                      labels= c("grammatical PP","ungrammatical PP","grammatical RC","ungrammatical RC"),
+                      breaks= c("grammatical PP","ungrammatical PP","grammatical RC","ungrammatical RC"))+
+  ylim(6,7.25)+
+  ggtitle("SPR LOG TRANSFORMED RT\nSPS CONDITION BY BIN AND MODIFIER")
+
+pdf("sps.contingency.PDF")
+SPS.contingency
+dev.off()
+
+#   z-scoring and binning by condition
+
+PP.SSS$z.by.cond <- ave(PP.SSS$Response, PP.SSS$Subject,FUN = scale)
+PP.SPS$z.by.cond <- ave(PP.SPS$Response, PP.SPS$Subject,FUN = scale)
+PP.SSP$z.by.cond <- ave(PP.SSP$Response, PP.SSP$Subject,FUN = scale)
+PP.SPP$z.by.cond <- ave(PP.SPP$Response, PP.SPP$Subject,FUN = scale)
+
+RC.SSS$z.by.cond <- ave(RC.SSS$Response, RC.SSS$Subject,FUN = scale)
+RC.SPS$z.by.cond <- ave(RC.SPS$Response, RC.SPS$Subject,FUN = scale)
+RC.SSP$z.by.cond <- ave(RC.SSP$Response, RC.SSP$Subject,FUN = scale)
+RC.SPP$z.by.cond <- ave(RC.SPP$Response, RC.SPP$Subject,FUN = scale)
+
+all.trials <- rbind(PP.SSS,PP.SPS,PP.SSP,PP.SPP,RC.SSS,RC.SPS,RC.SSP,RC.SPP)
+all.trials$z.by.cond <- as.numeric(all.trials$z.by.cond)
+
+ggplot(PP.SPP,aes(x=z.by.cond))+
+  geom_histogram(binwidth=.1)+
+  xlim(-3,3)+
+  ggtitle("SPR LOG(RT) DISTRIBUTION")
+
+quantile(all.trials$z.by.cond, probs = c(0.33,0.66),na.rm = TRUE)
+
+grammatical.trials <- droplevels(subset(all.trials, all.trials$z.by.cond > 0.5201565))
+ungrammatical.trials <- droplevels(subset(all.trials, all.trials$z.by.cond < -0.4082483))
+
+data.spr$bin <- ifelse(data.spr$ID %in% grammatical.trials$ID,"grammatical", ifelse(data.spr$ID %in% ungrammatical.trials$ID,"ungrammatical","middle"))
+data.spr.trimmed <- droplevels(subset(data.spr, bin != "middle"))
+
+data.spr.SPP <- droplevels(subset(data.spr.trimmed, Experiment == "cond-D" | Experiment == "cond-H"))
+
+SPP.log.RT.subj.by.cond <- data.spr.SPP %>%
+  group_by(Subject, bin, Modifier, region) %>%
+  summarise(average = mean(logRT))
+
+SPP.log.RT.cond.summ <- SPP.log.RT.subj.by.cond %>%
+  group_by(bin,Modifier, region) %>%
+  summarise(mean = mean(average),
+            SEM = sd(average)/sqrt(n_distinct(Subject)))
+
+SPP.log.RT.cond.summ$ID <- paste(SPP.log.RT.cond.summ$bin,SPP.log.RT.cond.summ$Modifier)
+
+ggplot(SPP.log.RT.cond.summ,aes(x=region,y=mean,color=ID,base=6,group=ID))+ 
+  labs(y="Reading time",x="Region",group=1) +
+  geom_point(stat = "identity",size=1)+
+  geom_errorbar(aes(ymax = mean+SEM,ymin=mean-SEM,width=0.05))+ 
+  theme(text = element_text(size=10))+
+  stat_identity(geom="line")+
+  scale_colour_manual(values = c("steelblue2","firebrick2","navyblue","firebrick4"),
+                      name="Modifier",
+                      labels= c("grammatical PP","ungrammatical PP","grammatical RC","ungrammatical RC"),
+                      breaks= c("grammatical PP","ungrammatical PP","grammatical RC","ungrammatical RC"))+
+  ylim(6.25,7.25)+
+  ggtitle("SPR LOG TRANSFORMED RT\nSPP CONDITION BY BIN AND MODIFIER")
+
+#   Isolate the SPS trials and see if differences emerge depending on binning
+
+data.spr.SPS <- droplevels(subset(data.spr.trimmed, Experiment == "cond-B" | Experiment == "cond-F"))
+
+SPS.log.RT.subj.by.cond <- data.spr.SPS %>%
+  group_by(Subject, bin, Modifier, region) %>%
+  summarise(average = mean(logRT))
+
+SPS.log.RT.cond.summ <- SPS.log.RT.subj.by.cond %>%
+  group_by(bin,Modifier, region) %>%
+  summarise(mean = mean(average),
+            SEM = sd(average)/sqrt(n_distinct(Subject)))
+
+SPS.log.RT.cond.summ$ID <- paste(SPS.log.RT.cond.summ$bin,SPS.log.RT.cond.summ$Modifier)
+
+ggplot(SPS.log.RT.cond.summ,aes(x=region,y=mean,color=ID,base=6,group=ID))+ 
+  labs(y="Reading time",x="Region",group=1) +
+  geom_point(stat = "identity",size=1)+
+  geom_errorbar(aes(ymax = mean+SEM,ymin=mean-SEM,width=0.05))+ 
+  theme(text = element_text(size=10))+
+  stat_identity(geom="line")+
+  scale_colour_manual(values = c("steelblue2","firebrick2","navyblue","firebrick4"),
+                      name="Modifier",
+                      labels= c("grammatical PP","ungrammatical PP","grammatical RC","ungrammatical RC"),
+                      breaks= c("grammatical PP","ungrammatical PP","grammatical RC","ungrammatical RC"))+
+  ylim(6.25,7.25)+
+  ggtitle("SPR LOG TRANSFORMED RT\nSPS CONDITION BY BIN AND MODIFIER")
+
+#   Correlation between z-score and RT
+
+#   Add the z-score value associated with the trial to the SPR data frame
+
+data.spr.spread <- data.spr %>%
+  select(Subject,ID,bin, region,logRT) %>%
+  spread(region,logRT) %>%
+  droplevels()
+
+spr.plus.judgment <- all.trials %>%
+  right_join(data.spr.spread)
+
+spr.plus.judgment$bin <- as.factor(spr.plus.judgment$bin)
+
+#   All experimental trials correlation between RT and judgments
+
+scatterplot(spr.plus.judgment$z,spr.plus.judgment$`3`,
+            xlab="Judgement Z-Scores", ylab="Log RT",
+            main="Log RT by Z-Scores in All Conditions")
+cor(spr.plus.judgment$z,spr.plus.judgment$`3`)
+
+#   Correlation between RT and judgments of all trials of *SPP PP condition
+
+spr.plus.judgment.SPP.PP <- droplevels(subset(spr.plus.judgment, Experiment == "cond-H"))
+with(spr.plus.judgment.SPP.PP, 
+     scatterplot(z,`3`,
+            xlab="Judgement Z-Scores", ylab="Log RT",
+            main="Log RT by Z-Scores in *SPP with PP modifier",
+            col = bin))
+
+
+cor(spr.plus.judgment.SPP.PP$z,spr.plus.judgment.SPP.PP$`3`)
+
+#   Correlation between RT and judgments of all trials of *SPP RC condition
+
+spr.plus.judgment.SPP.RC <- droplevels(subset(spr.plus.judgment, Experiment == "cond-D"))
+scatterplot(spr.plus.judgment.SPP.RC$z,spr.plus.judgment.SPP.RC$`3`,
+            xlab="Judgement Z-Scores", ylab="Log RT",
+            main="Log RT by Z-Scores in *SPP with RC modifier")
+
+
+cor(spr.plus.judgment.SPP.RC$z,spr.plus.judgment.SPP.RC$`3`)
+
+#   Correlation between RT and judgments of all trials of SPS PP condition
+
+spr.plus.judgment.SPS.PP <- droplevels(subset(spr.plus.judgment, Experiment == "cond-F"))
+scatterplot(spr.plus.judgment.SPS.PP$z,spr.plus.judgment.SPS.PP$`3`,
+            xlab="Judgement Z-Scores", ylab="Log RT",
+            main="Log RT by Z-Scores in SPS with PP modifier")
+cor(spr.plus.judgment.SPS.PP$z,spr.plus.judgment.SPS.PP$`3`)
+
+#   Correlation between RT and judgments of all trials of SPS RC condition
+
+spr.plus.judgment.SPS.RC <- droplevels(subset(spr.plus.judgment, Experiment == "cond-B"))
+scatterplot(spr.plus.judgment.SPS.RC$z,spr.plus.judgment.SPS.RC$`3`,
+            xlab="Judgement Z-Scores", ylab="Log RT",
+            main="Log RT by Z-Scores in SPS with RC modifier")
+cor(spr.plus.judgment.SPS.RC$z,spr.plus.judgment.SPS.RC$`3`)
 
 #################################################
 ###                                           ###
